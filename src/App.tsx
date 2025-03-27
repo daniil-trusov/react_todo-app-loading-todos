@@ -4,8 +4,9 @@ import React, { useEffect, useState } from 'react';
 
 import { Todo } from './types/Todo';
 import { FilterBy } from './types/FilterBy';
+import { ErrorMessage } from './types/ErrorMessage';
 
-import { USER_ID, getTodos } from './api/todos';
+import * as todoApi from './api/todos';
 
 import { UserWarning } from './UserWarning';
 import { TodoAppHeader } from './components/TodoAppHeader';
@@ -13,82 +14,67 @@ import { TodoList } from './components/TodoList';
 import { TodoAppFooter } from './components/TodoAppFooter';
 import { ErrorNotification } from './components/ErrorNotification';
 
+function filterTodo(todos: Todo[], filterBy: FilterBy): Todo[] {
+  switch (filterBy) {
+    case FilterBy.Active:
+      return todos.filter(todo => !todo.completed);
+    case FilterBy.Completed:
+      return todos.filter(todo => todo.completed);
+    default:
+      return [...todos];
+  }
+}
+
 export const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [todosFromServer, setTodosFromServer] = useState<Todo[]>([]);
-  const [visibleTodos, setVisibleTodos] = useState<Todo[]>([]);
+  const [errorMessage, setErrorMessage] = useState<ErrorMessage>(
+    ErrorMessage.NONE,
+  );
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [filterBy, setFilterBy] = useState(FilterBy.All);
 
-  useEffect(() => {
-    setErrorMessage('');
+  const loadTodos = () => {
+    setErrorMessage(ErrorMessage.NONE);
     setIsLoading(true);
-    getTodos()
-      .then(setTodosFromServer)
-      .catch(() => setErrorMessage('Unable to load todos'))
+    todoApi
+      .getTodos()
+      .then(setTodos)
+      .catch(() => setErrorMessage(ErrorMessage.TODO_LOAD))
       .finally(() => setIsLoading(false));
-  }, []);
+  };
 
-  useEffect(() => {
-    let todos;
+  useEffect(loadTodos, [filterBy]);
 
-    switch (filterBy) {
-      case FilterBy.Active:
-        todos = todosFromServer.filter(todo => !todo.completed);
-        break;
-      case FilterBy.Completed:
-        todos = todosFromServer.filter(todo => todo.completed);
-        break;
-      default:
-        todos = [...todosFromServer];
-        break;
-    }
+  const filteredTodos: Todo[] = filterTodo(todos, filterBy);
 
-    setVisibleTodos(todos);
-  }, [todosFromServer, filterBy]);
-
-  if (!USER_ID) {
+  if (!todoApi.USER_ID) {
     return <UserWarning />;
   }
 
-  const addNewTodo = (todoToAdd: Todo) => {
-    const maxId = Math.max(...visibleTodos.map(todo => todo.id));
-    const newTodo: Todo = { ...todoToAdd, id: maxId + 1, userId: USER_ID };
-
-    setVisibleTodos(currentTodos => [...currentTodos, newTodo]);
+  const addTodo = (newTodo: Todo) => {
+    todoApi
+      .addTodo(newTodo)
+      .then(loadTodos)
+      .catch(() => setErrorMessage(ErrorMessage.TODO_ADD));
   };
 
   const updateTodo = (updatedTodo: Todo) => {
-    const idToUpdate = visibleTodos.findIndex(
-      todo => todo.id === updatedTodo.id,
-    );
-
-    if (idToUpdate === undefined) {
-      setErrorMessage('Unable to update a todo');
-
-      return;
-    }
-
-    const newTodos = [...visibleTodos];
-
-    newTodos.splice(idToUpdate, 1, updatedTodo);
-
-    setVisibleTodos(newTodos);
+    todoApi
+      .updateTodo(updatedTodo)
+      .then(loadTodos)
+      .catch(() => setErrorMessage(ErrorMessage.TODO_UPDATE));
   };
 
-  const removeTodo = (idToRemove: number) => {
-    setVisibleTodos(currentTodos =>
-      currentTodos.filter(todo => todo.id !== idToRemove),
-    );
+  const deleteTodo = (todoId: number) => {
+    todoApi
+      .deleteTodo(todoId)
+      .then(loadTodos)
+      .catch(() => setErrorMessage(ErrorMessage.TODO_DELETE));
   };
 
-  const toggleAll = (completeAll: boolean) => {
-    setVisibleTodos(currentTodos => [
-      ...currentTodos.map(todo => ({ ...todo, completed: completeAll })),
-    ]);
-  };
+  const toggleAll = () => {};
 
-  const clearError = () => setErrorMessage('');
+  const clearError = () => setErrorMessage(ErrorMessage.NONE);
 
   return (
     <div className="todoapp">
@@ -96,24 +82,24 @@ export const App: React.FC = () => {
 
       <div className="todoapp__content">
         <TodoAppHeader
-          todos={visibleTodos}
-          onAdd={addNewTodo}
+          todos={filteredTodos}
+          onAdd={addTodo}
           onToggleAll={toggleAll}
         />
 
         {isLoading ? (
           <p>Loading...</p>
         ) : (
-          todosFromServer.length > 0 && (
+          todos.length > 0 && (
             <>
               <TodoList
-                todos={visibleTodos}
+                todos={filteredTodos}
                 onTodoEdit={updateTodo}
-                onTodoRemove={removeTodo}
+                onTodoRemove={deleteTodo}
               />
 
               <TodoAppFooter
-                todos={todosFromServer}
+                todos={todos}
                 currentFilter={filterBy}
                 onfilterChange={setFilterBy}
               />
