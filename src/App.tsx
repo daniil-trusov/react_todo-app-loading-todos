@@ -43,7 +43,7 @@ export const App: React.FC = () => {
       .finally(() => setIsLoading(false));
   };
 
-  useEffect(loadTodos, [filterBy]);
+  useEffect(loadTodos, []);
 
   const filteredTodos: Todo[] = filterTodo(todos, filterBy);
 
